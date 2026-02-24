@@ -64,7 +64,7 @@ export default function Sidebar() {
             </svg>
           </div>
           <div>
-            <p className="text-sm font-semibold leading-none" style={{ color: 'var(--text)' }}>GHA Scheduler</p>
+            <p className="text-sm font-semibold leading-none" style={{ color: 'var(--text)' }}>GitClaw</p>
             <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>GitHub Actions</p>
           </div>
         </div>

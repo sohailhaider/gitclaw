@@ -73,7 +73,7 @@ export default function SetupPage() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>
-            GHA Scheduler
+            GitClaw
           </h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>
             First-time setup — configure your dashboard

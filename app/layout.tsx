@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'GHA Scheduler — GitHub Actions Job Manager',
+  title: 'GitClaw — GitHub Actions Job Manager',
   description: 'Manage and schedule jobs running on GitHub Actions',
 };
 

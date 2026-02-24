@@ -1,5 +1,5 @@
 {
-  "name": "run-on-github-actions",
+  "name": "gitclaw",
   "version": "0.1.0",
   "private": true,
   "scripts": {

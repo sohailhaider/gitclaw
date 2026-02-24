@@ -27,7 +27,7 @@ export default function NewJobPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [schedule, setSchedule] = useState('0 0 * * *');
-  const [command, setCommand] = useState('echo "Hello from GHA Scheduler!"');
+  const [command, setCommand] = useState('echo "Hello from GitClaw!"');
   const [runsOn, setRunsOn] = useState('ubuntu-latest');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

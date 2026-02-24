@@ -1,4 +1,4 @@
-# GHA Scheduler
+# GitClaw
 
 A self-hosted Next.js dashboard for managing and creating scheduled jobs that run on **GitHub Actions**.
 
@@ -28,7 +28,7 @@ A self-hosted Next.js dashboard for managing and creating scheduled jobs that ru
 
 ```bash
 git clone <this-repo>
-cd run-on-github-actions
+cd gitclaw
 npm install
 ```
 

@@ -47,7 +47,7 @@ export default function LoginPage() {
                 d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
             </svg>
           </div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>GHA Scheduler</h1>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text)' }}>GitClaw</h1>
           <p className="mt-1 text-sm" style={{ color: 'var(--text-muted)' }}>Sign in to your dashboard</p>
         </div>
 
