@@ -26,15 +26,18 @@ export function buildWorkflowYaml(params: {
   schedule: string;
   command: string;
   runsOn: string;
+  jobType?: 'shell' | 'node' | 'python';
 }): string {
-  const { name, schedule, command, runsOn } = params;
-  // Indent command lines properly
+  const { name, schedule, command, runsOn, jobType = 'shell' } = params;
+  const escapedName = name.replace(/"/g, '\\"');
+
+  // Indent command lines to 10 spaces (matches YAML block scalar stripping)
   const commandLines = command
     .split('\n')
     .map((l) => `          ${l}`)
     .join('\n');
 
-  return `name: "${name.replace(/"/g, '\\"')}"
+  const header = `name: "${escapedName}"
 
 on:
   schedule:
@@ -46,8 +49,39 @@ jobs:
     runs-on: ${runsOn}
     steps:
       - uses: actions/checkout@v4
+`;
 
-      - name: Run scheduled job
+  if (jobType === 'node') {
+    return header + `
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Node.js script
+        run: |
+          node - << 'GITCLAW_SCRIPT_EOF'
+${commandLines}
+          GITCLAW_SCRIPT_EOF
+`;
+  }
+
+  if (jobType === 'python') {
+    return header + `
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Run Python script
+        run: |
+          python3 - << 'GITCLAW_SCRIPT_EOF'
+${commandLines}
+          GITCLAW_SCRIPT_EOF
+`;
+  }
+
+  // shell (default)
+  return header + `
+      - name: Run shell script
         run: |
 ${commandLines}
 `;

@@ -30,12 +30,13 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   if (!job) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
   const body = await request.json();
-  const { name, description, schedule, command, runsOn, enabled } = body as {
+  const { name, description, schedule, command, runsOn, jobType, enabled } = body as {
     name?: string;
     description?: string;
     schedule?: string;
     command?: string;
     runsOn?: string;
+    jobType?: 'shell' | 'node' | 'python';
     enabled?: boolean;
   };
 
@@ -43,12 +44,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
   const newSchedule = schedule ?? job.schedule;
   const newCommand = command ?? job.command;
   const newRunsOn = runsOn ?? job.runs_on;
+  const newJobType = (jobType ?? job.job_type ?? 'shell') as 'shell' | 'node' | 'python';
 
   const workflowYaml = buildWorkflowYaml({
     name: newName,
     schedule: newSchedule,
     command: newCommand,
     runsOn: newRunsOn,
+    jobType: newJobType,
   });
 
   const config = getGitHubConfig();
@@ -68,6 +71,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
     command: newCommand,
     workflow_yaml: workflowYaml,
     runs_on: newRunsOn,
+    job_type: newJobType,
     enabled: enabled !== undefined ? (enabled ? 1 : 0) : job.enabled,
   });
 

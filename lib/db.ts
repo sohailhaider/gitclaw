@@ -36,6 +36,7 @@ function initSchema(db: Database.Database) {
       command          TEXT NOT NULL,
       workflow_yaml    TEXT NOT NULL,
       runs_on          TEXT NOT NULL DEFAULT 'ubuntu-latest',
+      job_type         TEXT NOT NULL DEFAULT 'shell',
       enabled          INTEGER NOT NULL DEFAULT 1,
       created_at       TEXT NOT NULL,
       updated_at       TEXT NOT NULL,
@@ -52,6 +53,11 @@ function initSchema(db: Database.Database) {
       run_url    TEXT
     );
   `);
+
+  // Migration: add job_type column to existing DBs
+  try {
+    db.exec(`ALTER TABLE jobs ADD COLUMN job_type TEXT NOT NULL DEFAULT 'shell'`);
+  } catch { /* column already exists */ }
 }
 
 // ─── Settings ────────────────────────────────────────────────────────────────
@@ -79,6 +85,7 @@ export interface Job {
   command: string;
   workflow_yaml: string;
   runs_on: string;
+  job_type: string;
   enabled: number;
   created_at: string;
   updated_at: string;
@@ -98,8 +105,8 @@ export function createJob(job: Omit<Job, 'created_at' | 'updated_at'>): Job {
   const now = new Date().toISOString();
   getDb()
     .prepare(
-      `INSERT INTO jobs (id, name, description, schedule, command, workflow_yaml, runs_on, enabled, created_at, updated_at, last_triggered, workflow_file)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO jobs (id, name, description, schedule, command, workflow_yaml, runs_on, job_type, enabled, created_at, updated_at, last_triggered, workflow_file)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       job.id,
@@ -109,6 +116,7 @@ export function createJob(job: Omit<Job, 'created_at' | 'updated_at'>): Job {
       job.command,
       job.workflow_yaml,
       job.runs_on,
+      job.job_type ?? 'shell',
       job.enabled,
       now,
       now,
@@ -124,7 +132,7 @@ export function updateJob(id: string, patch: Partial<Omit<Job, 'id' | 'created_a
   const updated = { ...job, ...patch, updated_at: new Date().toISOString() };
   getDb()
     .prepare(
-      `UPDATE jobs SET name=?, description=?, schedule=?, command=?, workflow_yaml=?, runs_on=?, enabled=?, updated_at=?, last_triggered=?, workflow_file=?
+      `UPDATE jobs SET name=?, description=?, schedule=?, command=?, workflow_yaml=?, runs_on=?, job_type=?, enabled=?, updated_at=?, last_triggered=?, workflow_file=?
        WHERE id=?`
     )
     .run(
@@ -134,6 +142,7 @@ export function updateJob(id: string, patch: Partial<Omit<Job, 'id' | 'created_a
       updated.command,
       updated.workflow_yaml,
       updated.runs_on,
+      updated.job_type ?? 'shell',
       updated.enabled,
       updated.updated_at,
       updated.last_triggered,

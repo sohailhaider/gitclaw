@@ -10,6 +10,14 @@ const RUNS_ON_OPTIONS = [
   'ubuntu-latest', 'ubuntu-22.04', 'ubuntu-20.04', 'windows-latest', 'macos-latest',
 ];
 
+type JobType = 'shell' | 'node' | 'python';
+
+const JOB_TYPES: { value: JobType; label: string; icon: string; description: string; language: string }[] = [
+  { value: 'shell', label: 'Shell Script', icon: '>_', description: 'Bash / shell commands', language: 'bash' },
+  { value: 'node', label: 'Node.js Script', icon: 'JS', description: 'JavaScript with Node.js 20', language: 'javascript' },
+  { value: 'python', label: 'Python Script', icon: 'Py', description: 'Python 3 script', language: 'python' },
+];
+
 interface Job {
   id: string;
   name: string;
@@ -18,6 +26,7 @@ interface Job {
   command: string;
   workflow_yaml: string;
   runs_on: string;
+  job_type: string;
   enabled: number;
   created_at: string;
   updated_at: string;
@@ -77,6 +86,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [schedule, setSchedule] = useState('');
   const [command, setCommand] = useState('');
   const [runsOn, setRunsOn] = useState('ubuntu-latest');
+  const [jobType, setJobType] = useState<JobType>('shell');
 
   const fetchRuns = useCallback(async () => {
     try {
@@ -134,6 +144,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       setSchedule(data.job.schedule);
       setCommand(data.job.command);
       setRunsOn(data.job.runs_on);
+      setJobType((data.job.job_type as JobType) ?? 'shell');
     } finally {
       setLoading(false);
     }
@@ -147,7 +158,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       const res = await fetch(`/api/jobs/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, schedule, command, runsOn }),
+        body: JSON.stringify({ name, description, schedule, command, runsOn, jobType }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? 'Save failed'); setSaving(false); return; }
@@ -338,6 +349,28 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
                        style={{ background: 'var(--surface-2)', border: '1px solid var(--border)', color: 'var(--text)' }} />
               </Field>
 
+              <Field label="Job Type">
+                <div className="grid grid-cols-3 gap-2">
+                  {JOB_TYPES.map(type => (
+                    <button
+                      key={type.value}
+                      type="button"
+                      onClick={() => setJobType(type.value)}
+                      className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg text-xs transition-colors"
+                      style={{
+                        background: jobType === type.value ? 'rgba(31,111,235,0.15)' : 'var(--surface-2)',
+                        border: `1px solid ${jobType === type.value ? 'var(--info)' : 'var(--border)'}`,
+                        color: jobType === type.value ? '#79c0ff' : 'var(--text-muted)',
+                      }}
+                    >
+                      <span className="font-mono font-bold text-sm">{type.icon}</span>
+                      <span className="font-medium">{type.label}</span>
+                      <span className="opacity-70 text-[10px]">{type.description}</span>
+                    </button>
+                  ))}
+                </div>
+              </Field>
+
               <Field label="Runner">
                 <select value={runsOn} onChange={e => setRunsOn(e.target.value)}
                         className="w-full px-3 py-2 rounded-lg text-sm outline-none"
@@ -353,9 +386,17 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               <CronInput value={schedule} onChange={setSchedule} />
             </section>
 
-            <section className="rounded-xl p-5"
+            <section className="rounded-xl p-5 space-y-3"
                      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-              <h2 className="text-sm font-semibold mb-3" style={{ color: 'var(--text)' }}>Command</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                  {jobType === 'node' ? 'Node.js Script' : jobType === 'python' ? 'Python Script' : 'Shell Commands'}
+                </h2>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded"
+                      style={{ background: 'var(--surface-2)', color: '#79c0ff', border: '1px solid var(--border)' }}>
+                  {JOB_TYPES.find(t => t.value === jobType)?.language ?? 'bash'}
+                </span>
+              </div>
               <textarea value={command} onChange={e => setCommand(e.target.value)}
                         rows={6} spellCheck={false}
                         className="w-full px-3 py-2 rounded-lg text-sm outline-none font-mono resize-y"
@@ -383,6 +424,7 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
               <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--text-muted)' }}>Info</p>
               {[
                 { label: 'ID', value: job.id },
+                { label: 'Type', value: JOB_TYPES.find(t => t.value === job.job_type)?.label ?? job.job_type },
                 { label: 'Created', value: formatDate(job.created_at) },
                 { label: 'Updated', value: formatDate(job.updated_at) },
                 { label: 'Last Triggered', value: formatDate(job.last_triggered) },

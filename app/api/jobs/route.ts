@@ -17,12 +17,13 @@ export async function POST(request: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json();
-  const { name, description, schedule, command, runsOn = 'ubuntu-latest' } = body as {
+  const { name, description, schedule, command, runsOn = 'ubuntu-latest', jobType = 'shell' } = body as {
     name: string;
     description?: string;
     schedule: string;
     command: string;
     runsOn?: string;
+    jobType?: 'shell' | 'node' | 'python';
   };
 
   if (!name || !schedule || !command) {
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
   }
 
   const id = generateId();
-  const workflowYaml = buildWorkflowYaml({ name, schedule, command, runsOn });
+  const workflowYaml = buildWorkflowYaml({ name, schedule, command, runsOn, jobType });
   const filePath = workflowFileName(id);
 
   // Push workflow to GitHub
@@ -54,6 +55,7 @@ export async function POST(request: NextRequest) {
     command,
     workflow_yaml: workflowYaml,
     runs_on: runsOn,
+    job_type: jobType,
     enabled: 1,
     last_triggered: null,
     workflow_file: filePath,

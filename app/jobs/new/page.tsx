@@ -13,6 +13,35 @@ const RUNS_ON_OPTIONS = [
   'macos-latest',
 ];
 
+type JobType = 'shell' | 'node' | 'python';
+
+const JOB_TYPES: { value: JobType; label: string; icon: string; description: string; defaultCommand: string; language: string }[] = [
+  {
+    value: 'shell',
+    label: 'Shell Script',
+    icon: '>_',
+    description: 'Bash / shell commands',
+    defaultCommand: 'echo "Hello from GitClaw!"',
+    language: 'bash',
+  },
+  {
+    value: 'node',
+    label: 'Node.js Script',
+    icon: 'JS',
+    description: 'JavaScript with Node.js 20',
+    defaultCommand: 'console.log("Hello from GitClaw!");',
+    language: 'javascript',
+  },
+  {
+    value: 'python',
+    label: 'Python Script',
+    icon: 'Py',
+    description: 'Python 3 script',
+    defaultCommand: 'print("Hello from GitClaw!")',
+    language: 'python',
+  },
+];
+
 const PRESETS = [
   { label: 'Every hour',        cron: '0 * * * *',   description: 'Runs at the start of every hour' },
   { label: 'Every day at midnight', cron: '0 0 * * *', description: 'Runs at 00:00 UTC daily' },
@@ -27,11 +56,53 @@ export default function NewJobPage() {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [schedule, setSchedule] = useState('0 0 * * *');
+  const [jobType, setJobType] = useState<JobType>('shell');
   const [command, setCommand] = useState('echo "Hello from GitClaw!"');
   const [runsOn, setRunsOn] = useState('ubuntu-latest');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+
+  function handleJobTypeChange(type: JobType) {
+    const currentDefault = JOB_TYPES.find(t => t.value === jobType)?.defaultCommand ?? '';
+    setJobType(type);
+    // Replace command only if it still matches the previous default
+    if (command === currentDefault) {
+      setCommand(JOB_TYPES.find(t => t.value === type)?.defaultCommand ?? '');
+    }
+  }
+
+  const commandLines = command.split('\n').map(l => '          ' + l).join('\n');
+
+  const previewSetupStep = jobType === 'node'
+    ? `
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+`
+    : jobType === 'python'
+    ? `
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+`
+    : '';
+
+  const previewRunStep = jobType === 'node'
+    ? `      - name: Run Node.js script
+        run: |
+          node - << 'GITCLAW_SCRIPT_EOF'
+${commandLines}
+          GITCLAW_SCRIPT_EOF`
+    : jobType === 'python'
+    ? `      - name: Run Python script
+        run: |
+          python3 - << 'GITCLAW_SCRIPT_EOF'
+${commandLines}
+          GITCLAW_SCRIPT_EOF`
+    : `      - name: Run shell script
+        run: |
+${commandLines}`;
 
   const previewYaml = `name: "${name || 'My Job'}"
 
@@ -45,10 +116,8 @@ jobs:
     runs-on: ${runsOn}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Run scheduled job
-        run: |
-${command.split('\n').map(l => '          ' + l).join('\n')}
+${previewSetupStep}
+${previewRunStep}
 `;
 
   async function handleSubmit(e: React.FormEvent) {
@@ -63,7 +132,7 @@ ${command.split('\n').map(l => '          ' + l).join('\n')}
       const res = await fetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, schedule, command, runsOn }),
+        body: JSON.stringify({ name, description, schedule, command, runsOn, jobType }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -126,6 +195,28 @@ ${command.split('\n').map(l => '          ' + l).join('\n')}
               />
             </Field>
 
+            <Field label="Job Type">
+              <div className="grid grid-cols-3 gap-2">
+                {JOB_TYPES.map(type => (
+                  <button
+                    key={type.value}
+                    type="button"
+                    onClick={() => handleJobTypeChange(type.value)}
+                    className="flex flex-col items-center gap-1.5 px-3 py-3 rounded-lg text-xs transition-colors"
+                    style={{
+                      background: jobType === type.value ? 'rgba(31,111,235,0.15)' : 'var(--surface-2)',
+                      border: `1px solid ${jobType === type.value ? 'var(--info)' : 'var(--border)'}`,
+                      color: jobType === type.value ? '#79c0ff' : 'var(--text-muted)',
+                    }}
+                  >
+                    <span className="font-mono font-bold text-sm">{type.icon}</span>
+                    <span className="font-medium">{type.label}</span>
+                    <span className="opacity-70 text-[10px]">{type.description}</span>
+                  </button>
+                ))}
+              </div>
+            </Field>
+
             <Field label="Runner">
               <select
                 value={runsOn}
@@ -174,16 +265,28 @@ ${command.split('\n').map(l => '          ' + l).join('\n')}
           {/* Command */}
           <section className="rounded-xl p-5 space-y-3"
                    style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-            <h2 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Command</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                {jobType === 'node' ? 'Node.js Script' : jobType === 'python' ? 'Python Script' : 'Shell Commands'}
+              </h2>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded"
+                    style={{ background: 'var(--surface-2)', color: '#79c0ff', border: '1px solid var(--border)' }}>
+                {JOB_TYPES.find(t => t.value === jobType)?.language}
+              </span>
+            </div>
             <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
-              Shell commands to run inside the GitHub Actions runner
+              {jobType === 'node'
+                ? 'JavaScript code to run with Node.js 20 on the GitHub Actions runner'
+                : jobType === 'python'
+                ? 'Python 3 code to run on the GitHub Actions runner'
+                : 'Shell commands to run inside the GitHub Actions runner'}
             </p>
             <textarea
               value={command}
               onChange={e => setCommand(e.target.value)}
               rows={6}
               spellCheck={false}
-              placeholder="echo 'Hello World!'"
+              placeholder={JOB_TYPES.find(t => t.value === jobType)?.defaultCommand}
               required
               className="w-full px-3 py-2 rounded-lg text-sm outline-none font-mono resize-y"
               style={{
