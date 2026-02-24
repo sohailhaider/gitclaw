@@ -163,6 +163,44 @@ export async function listWorkflowRuns(
   }
 }
 
+export async function getWorkflowRunJobs(
+  config: GitHubConfig,
+  runId: number
+): Promise<Array<{
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  steps: Array<{ number: number; name: string; status: string; conclusion: string | null }>;
+}>> {
+  const octokit = createOctokit(config.token);
+  try {
+    const { data } = await octokit.actions.listJobsForWorkflowRun({
+      owner: config.owner,
+      repo: config.repo,
+      run_id: runId,
+    });
+    return data.jobs.map((job) => ({
+      id: job.id,
+      name: job.name,
+      status: job.status ?? 'unknown',
+      conclusion: job.conclusion ?? null,
+      started_at: job.started_at ?? null,
+      completed_at: job.completed_at ?? null,
+      steps: (job.steps ?? []).map((step) => ({
+        number: step.number,
+        name: step.name,
+        status: step.status ?? 'unknown',
+        conclusion: step.conclusion ?? null,
+      })),
+    }));
+  } catch {
+    return [];
+  }
+}
+
 export async function validateGitHubToken(
   token: string,
   owner: string,

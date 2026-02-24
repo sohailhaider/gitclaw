@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, use, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import CronInput from '@/components/CronInput';
@@ -25,12 +25,30 @@ interface Job {
   workflow_file: string | null;
 }
 
+interface RunStep {
+  number: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+}
+
+interface RunJob {
+  id: number;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  steps: RunStep[];
+}
+
 interface GithubRun {
   id: number;
   status: string;
   conclusion: string | null;
   html_url: string;
   created_at: string;
+  jobs: RunJob[];
 }
 
 export default function JobDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -47,6 +65,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [error, setError] = useState('');
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
   const [tab, setTab] = useState<'details' | 'yaml' | 'runs'>('details');
+  const [polling, setPolling] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [expandedRun, setExpandedRun] = useState<number | null>(null);
+  const pollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Form state
   const [name, setName] = useState('');
@@ -55,9 +77,29 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
   const [command, setCommand] = useState('');
   const [runsOn, setRunsOn] = useState('ubuntu-latest');
 
+  const fetchRuns = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/jobs/${id}/runs`);
+      if (res.ok) {
+        const data = await res.json();
+        const runs: GithubRun[] = data.githubRuns ?? [];
+        setGithubRuns(runs);
+        setLastUpdated(new Date());
+
+        // Schedule next poll if any run is still active
+        const hasActive = runs.some(r => r.status === 'in_progress' || r.status === 'queued');
+        setPolling(hasActive);
+        if (hasActive) {
+          pollRef.current = setTimeout(fetchRuns, 10_000);
+        }
+      }
+    } catch { /* ignore */ }
+  }, [id]);
+
   useEffect(() => {
     fetchJob();
     fetchRuns();
+    return () => { if (pollRef.current) clearTimeout(pollRef.current); };
   }, [id]);
 
   async function fetchJob() {
@@ -74,16 +116,6 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
     } finally {
       setLoading(false);
     }
-  }
-
-  async function fetchRuns() {
-    try {
-      const res = await fetch(`/api/jobs/${id}/runs`);
-      if (res.ok) {
-        const data = await res.json();
-        setGithubRuns(data.githubRuns ?? []);
-      }
-    } catch { /* ignore */ }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -113,9 +145,11 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
       const res = await fetch(`/api/jobs/${id}/trigger`, { method: 'POST' });
       const data = await res.json();
       if (res.ok) {
-        showToast('Job triggered! View runs on GitHub.', 'success');
+        showToast('Job triggered! Checking status…', 'success');
         fetchJob();
-        setTimeout(fetchRuns, 3000);
+        setTab('runs');
+        setPolling(true);
+        pollRef.current = setTimeout(fetchRuns, 5_000);
       } else {
         showToast(data.error ?? 'Trigger failed', 'error');
       }
@@ -255,6 +289,10 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
             }}
           >
             {t === 'yaml' ? 'Workflow YAML' : t.charAt(0).toUpperCase() + t.slice(1)}
+            {t === 'runs' && polling && (
+              <span className="ml-1.5 inline-block w-2 h-2 rounded-full animate-pulse align-middle"
+                    style={{ background: 'var(--warning)' }} />
+            )}
           </button>
         ))}
       </div>
@@ -369,9 +407,34 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
           <div className="px-4 py-3 flex items-center justify-between"
                style={{ borderBottom: '1px solid var(--border)' }}>
-            <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>Recent GitHub Runs</span>
-            <button onClick={fetchRuns} className="text-xs" style={{ color: 'var(--text-muted)' }}>Refresh</button>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium" style={{ color: 'var(--text)' }}>Recent GitHub Runs</span>
+              {polling && (
+                <span className="text-xs flex items-center gap-1.5" style={{ color: 'var(--warning)' }}>
+                  <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  </svg>
+                  Live
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {lastUpdated && (
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Updated {lastUpdated.toLocaleTimeString()}
+                </span>
+              )}
+              <button
+                onClick={() => { if (pollRef.current) clearTimeout(pollRef.current); fetchRuns(); }}
+                className="text-xs px-2 py-1 rounded"
+                style={{ background: 'var(--surface-2)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}
+              >
+                Refresh
+              </button>
+            </div>
           </div>
+
           {githubRuns.length === 0 ? (
             <div className="py-12 text-center text-sm" style={{ color: 'var(--text-muted)' }}>
               No runs found. Trigger the job or wait for the schedule.
@@ -379,17 +442,79 @@ export default function JobDetailPage({ params }: { params: Promise<{ id: string
           ) : (
             <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
               {githubRuns.map(run => (
-                <div key={run.id} className="px-4 py-3 flex items-center gap-4">
-                  <StatusBadge status={run.status} conclusion={run.conclusion} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm" style={{ color: 'var(--text)' }}>Run #{run.id}</p>
-                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{formatDate(run.created_at)}</p>
-                  </div>
-                  <a href={run.html_url} target="_blank" rel="noopener noreferrer"
-                     className="text-xs px-2 py-1 rounded"
-                     style={{ background: 'var(--surface-2)', color: '#79c0ff', border: '1px solid var(--border)' }}>
-                    View →
-                  </a>
+                <div key={run.id}>
+                  {/* Run row */}
+                  <button
+                    className="w-full px-4 py-3 flex items-center gap-4 text-left hover:opacity-80 transition-opacity"
+                    onClick={() => setExpandedRun(expandedRun === run.id ? null : run.id)}
+                  >
+                    <StatusBadge status={run.status} conclusion={run.conclusion} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm" style={{ color: 'var(--text)' }}>Run #{run.id}</p>
+                      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{formatDate(run.created_at)}</p>
+                    </div>
+                    <a href={run.html_url} target="_blank" rel="noopener noreferrer"
+                       onClick={e => e.stopPropagation()}
+                       className="text-xs px-2 py-1 rounded flex-shrink-0"
+                       style={{ background: 'var(--surface-2)', color: '#79c0ff', border: '1px solid var(--border)' }}>
+                      View →
+                    </a>
+                    <svg
+                      className={`w-4 h-4 flex-shrink-0 transition-transform ${expandedRun === run.id ? 'rotate-180' : ''}`}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19 9-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Expanded: steps */}
+                  {expandedRun === run.id && (
+                    <div className="px-4 pb-4" style={{ borderTop: '1px solid var(--border)' }}>
+                      {run.jobs.length === 0 ? (
+                        <p className="text-xs pt-3" style={{ color: 'var(--text-muted)' }}>
+                          No step data available yet.
+                        </p>
+                      ) : (
+                        run.jobs.map(job => (
+                          <div key={job.id} className="mt-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <StatusBadge status={job.status} conclusion={job.conclusion} />
+                              <span className="text-xs font-medium" style={{ color: 'var(--text)' }}>{job.name}</span>
+                              {job.started_at && job.completed_at && (
+                                <span className="text-xs ml-auto" style={{ color: 'var(--text-muted)' }}>
+                                  {Math.round((new Date(job.completed_at).getTime() - new Date(job.started_at).getTime()) / 1000)}s
+                                </span>
+                              )}
+                            </div>
+                            <div className="rounded-lg overflow-hidden"
+                                 style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+                              {job.steps.map((step, i) => (
+                                <div key={step.number}
+                                     className="flex items-center gap-2.5 px-3 py-2 text-xs"
+                                     style={{
+                                       borderTop: i > 0 ? '1px solid var(--border)' : undefined,
+                                       color: 'var(--text-muted)',
+                                     }}>
+                                  <StepIcon status={step.status} conclusion={step.conclusion} />
+                                  <span style={{ color: step.status === 'in_progress' ? 'var(--warning)' : 'var(--text)' }}>
+                                    {step.name}
+                                  </span>
+                                  {step.status === 'in_progress' && (
+                                    <svg className="w-3 h-3 animate-spin ml-auto" fill="none" viewBox="0 0 24 24"
+                                         style={{ color: 'var(--warning)' }}>
+                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                                    </svg>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -457,6 +582,44 @@ function StatusBadge({ status, conclusion }: { status: string; conclusion: strin
           style={{ color, background: `${color}22`, border: `1px solid ${color}44` }}>
       {label}
     </span>
+  );
+}
+
+function StepIcon({ status, conclusion }: { status: string; conclusion: string | null }) {
+  if (status === 'in_progress') {
+    return (
+      <span className="w-3.5 h-3.5 flex-shrink-0 rounded-full border-2 border-current animate-pulse"
+            style={{ color: 'var(--warning)' }} />
+    );
+  }
+  if (status === 'completed') {
+    if (conclusion === 'success') {
+      return (
+        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+             style={{ color: 'var(--accent-hover)' }}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m4.5 12.75 6 6 9-13.5" />
+        </svg>
+      );
+    }
+    if (conclusion === 'failure' || conclusion === 'cancelled') {
+      return (
+        <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+             style={{ color: 'var(--danger)' }}>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18 18 6M6 6l12 12" />
+        </svg>
+      );
+    }
+    return (
+      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"
+           style={{ color: 'var(--text-muted)' }}>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+      </svg>
+    );
+  }
+  // queued / pending
+  return (
+    <span className="w-3.5 h-3.5 flex-shrink-0 rounded-full border-2"
+          style={{ borderColor: 'var(--text-muted)' }} />
   );
 }
 
